@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 
+const DRAWING_KEY = "noteflow:note:drawing";
+
 export default function DrawingCanvas() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
 
-  useEffect(() => {
+  function setupCanvas() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -20,9 +22,48 @@ export default function DrawingCanvas() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    ctx.scale(dpr, dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // reset + scale
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
+  }
+
+  function loadDrawing() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const saved = localStorage.getItem(DRAWING_KEY);
+    if (!saved) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const img = new Image();
+    img.onload = () => {
+      const rect = canvas.getBoundingClientRect();
+      ctx.clearRect(0, 0, rect.width, rect.height);
+      ctx.drawImage(img, 0, 0, rect.width, rect.height);
+    };
+    img.src = saved;
+  }
+
+  function saveDrawing() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dataUrl = canvas.toDataURL("image/png");
+    localStorage.setItem(DRAWING_KEY, dataUrl);
+  }
+
+  useEffect(() => {
+    setupCanvas();
+    loadDrawing();
+
+    // optional: re-setup if window resizes (keeps it usable)
+    const onResize = () => {
+      setupCanvas();
+      loadDrawing(); // re-draw saved image onto resized canvas
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   function getPos(e: React.PointerEvent<HTMLCanvasElement>) {
@@ -60,6 +101,9 @@ export default function DrawingCanvas() {
   function onPointerUp(e: React.PointerEvent<HTMLCanvasElement>) {
     setIsDrawing(false);
     canvasRef.current?.releasePointerCapture(e.pointerId);
+
+    // Save when a stroke finishes (efficient + feels instant)
+    saveDrawing();
   }
 
   function clear() {
@@ -70,6 +114,7 @@ export default function DrawingCanvas() {
 
     const rect = canvas.getBoundingClientRect();
     ctx.clearRect(0, 0, rect.width, rect.height);
+    localStorage.removeItem(DRAWING_KEY);
   }
 
   return (
