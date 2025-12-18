@@ -2,9 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 
-const DRAWING_KEY = "noteflow:note:drawing";
+type Props = {
+  value: string | null; // dataURL (png) or null
+  onChange: (nextValue: string | null) => void;
+};
 
-export default function DrawingCanvas() {
+export default function DrawingCanvas({ value, onChange }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
 
@@ -12,7 +15,6 @@ export default function DrawingCanvas() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Make canvas sharp on retina screens
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
 
@@ -22,18 +24,14 @@ export default function DrawingCanvas() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // reset + scale
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
   }
 
-  function loadDrawing() {
+  function drawImage(dataUrl: string) {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
-    const saved = localStorage.getItem(DRAWING_KEY);
-    if (!saved) return;
-
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -43,28 +41,32 @@ export default function DrawingCanvas() {
       ctx.clearRect(0, 0, rect.width, rect.height);
       ctx.drawImage(img, 0, 0, rect.width, rect.height);
     };
-    img.src = saved;
+    img.src = dataUrl;
   }
 
-  function saveDrawing() {
+  function saveToParent() {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const dataUrl = canvas.toDataURL("image/png");
-    localStorage.setItem(DRAWING_KEY, dataUrl);
+    onChange(canvas.toDataURL("image/png"));
   }
 
   useEffect(() => {
     setupCanvas();
-    loadDrawing();
+    if (value) drawImage(value);
 
-    // optional: re-setup if window resizes (keeps it usable)
     const onResize = () => {
       setupCanvas();
-      loadDrawing(); // re-draw saved image onto resized canvas
+      if (value) drawImage(value);
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // If parent value changes later, redraw it
+  useEffect(() => {
+    if (value) drawImage(value);
+  }, [value]);
 
   function getPos(e: React.PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current!;
@@ -101,9 +103,7 @@ export default function DrawingCanvas() {
   function onPointerUp(e: React.PointerEvent<HTMLCanvasElement>) {
     setIsDrawing(false);
     canvasRef.current?.releasePointerCapture(e.pointerId);
-
-    // Save when a stroke finishes (efficient + feels instant)
-    saveDrawing();
+    saveToParent(); // save after each stroke
   }
 
   function clear() {
@@ -114,7 +114,7 @@ export default function DrawingCanvas() {
 
     const rect = canvas.getBoundingClientRect();
     ctx.clearRect(0, 0, rect.width, rect.height);
-    localStorage.removeItem(DRAWING_KEY);
+    onChange(null);
   }
 
   return (

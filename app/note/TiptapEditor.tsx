@@ -1,86 +1,49 @@
 "use client";
 
-import { useEditor, EditorContent } from "@tiptap/react";
+import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect } from "react";
 
 type Props = {
-  storageKey: string;
+  value: any; // TipTap JSON
+  onChange: (nextValue: any) => void;
 };
 
-export default function TiptapEditor({ storageKey }: Props) {
+export default function TiptapEditor({ value, onChange }: Props) {
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [StarterKit],
-    content: "<p>Start typing...</p>",
+    content: value ?? { type: "doc", content: [{ type: "paragraph" }] },
     editorProps: {
       attributes: {
+        class: "ProseMirror",
         style:
-          "min-height:150px; padding:12px; border:1px solid #ccc; border-radius:8px; outline:none;",
+          "min-height:140px; padding:12px; border:1px solid #ccc; border-radius:8px; outline:none; background:white;",
       },
     },
   });
 
-  // Load saved content once
+  // If parent value changes (load/reset), update editor once
   useEffect(() => {
     if (!editor) return;
-    const saved = localStorage.getItem(storageKey);
-    if (!saved) return;
+    if (!value) return;
+    editor.commands.setContent(value);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor]);
 
-    try {
-      editor.commands.setContent(JSON.parse(saved));
-    } catch {
-      // If something is malformed, ignore and keep default content
-    }
-  }, [editor, storageKey]);
-
-  // Save whenever the editor updates
+  // Emit updates to parent
   useEffect(() => {
     if (!editor) return;
 
-    const save = () => {
-      const json = editor.getJSON();
-      localStorage.setItem(storageKey, JSON.stringify(json));
-    };
+    const handler = () => onChange(editor.getJSON());
+    editor.on("update", handler);
 
-    editor.on("update", save);
     return () => {
-      editor.off("update", save);
+      editor.off("update", handler);
     };
-  }, [editor, storageKey]);
+  }, [editor, onChange]);
 
   if (!editor) return null;
 
-  return (
-    <div style={{ display: "grid", gap: 8 }}>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button
-          onClick={() => editor.chain().focus().toggleBold().run()}
-          style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 8, background: "white" }}
-        >
-          Bold
-        </button>
-        <button
-          onClick={() => editor.chain().focus().toggleItalic().run()}
-          style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 8, background: "white" }}
-        >
-          Italic
-        </button>
-        <button
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-          style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 8, background: "white" }}
-        >
-          Bullets
-        </button>
-        <button
-          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-          style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 8, background: "white" }}
-        >
-          H2
-        </button>
-      </div>
-
-      <EditorContent editor={editor} />
-    </div>
-  );
+  return <EditorContent editor={editor} />;
 }
